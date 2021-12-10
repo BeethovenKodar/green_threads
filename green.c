@@ -15,7 +15,7 @@ static green_t main_green = {&main_cntx, NULL, NULL, NULL, NULL, NULL, FALSE};
 static green_t *running = &main_green;
 
 //"last" element in queue
-static green_t dummy = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, TRUE};
+static green_t dummy = {NULL, NULL, NULL, NULL, NULL, NULL, TRUE};
 green_t *first = &dummy;
 green_t *last = &dummy;
 
@@ -47,32 +47,6 @@ green_t *retrieve2() {
     return use;
 }
 
-/* insert new thread last in queue */
-/* void insert(green_t *new) {
-    new->prev = NULL;
-    new->next = queue;  //set next to previous last
-    queue->prev = new;  //set prevous last prev to new last
-    queue = new;        //update queue pointer
-} */
-
-
-/* pull out thread first in queue */
-/* green_t *retrieve() {
-    if (sentinel.prev == NULL) { //sentinel alone in queue
-        return NULL;
-    }
-
-    green_t *use = sentinel.prev;
-    if (use->prev != NULL) { //sentinel and 2+ threads in queue
-        use->prev->next = &sentinel;
-        sentinel.prev = use->prev;
-    } else {                //sentinel and 1 thread in queue
-        sentinel.prev = NULL;
-        queue = &sentinel;
-    }
-    return use;
-} */
-
 void green_thread() {
     green_t *this = running;
 
@@ -103,7 +77,6 @@ int green_create(green_t *new, void *(*fun)(void*), void *arg) {
     new->context = cntx;
     new->fun = fun;
     new->arg = arg;
-    new->prev = NULL;
     new->next = NULL;
     new->join = NULL;
     new->retval = NULL;
