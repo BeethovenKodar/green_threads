@@ -18,8 +18,9 @@ int main() {
 
     green_create(&g0, test, &a0);
     green_create(&g1, test, &a1);
-    
+    printf("first\n");
     green_join(&g0, NULL);
+    printf("second time\n");
     green_join(&g1, NULL);
     
     printf("done\n");
