@@ -25,13 +25,13 @@ void init() {
     getcontext(&main_cntx);
 }
 
-void insert2(green_t *new) {
+void insert(green_t *new) {
     new->next = NULL;
     last->next = new;
     last = new;
 }
 
-green_t *retrieve2() {
+green_t *retrieve() {
     green_t *use = first->next;
     if (use == NULL) {
         fprintf(stderr, "ready list null\n");
@@ -53,14 +53,13 @@ void green_thread() {
     void *result = (*this->fun)(this->arg);
 
     if (this->join != NULL) {
-        insert2(this->join); //place waiting (joining) thread in ready queu
+        insert(this->join); //place waiting (joining) thread in ready queu
     }
     
     this->retval = result;      //save result of execution
     this->zombie = TRUE;        //zombie state
 
-    green_t *next = retrieve2(); //find the next thread to run
-
+    green_t *next = retrieve(); //find the next thread to run
     running = next;
     setcontext(next->context);
 }
@@ -82,33 +81,32 @@ int green_create(green_t *new, void *(*fun)(void*), void *arg) {
     new->retval = NULL;
     new->zombie = FALSE;
 
-    insert2(new);
-
+    insert(new);
     return 0;
 }
 
 int green_yield() {
     green_t *susp = running;
-    
-    insert2(susp);               //set susp last in queue
-    green_t *next = retrieve2(); //get first in queue
-    
+    insert(susp);               //set susp last in queue
+
+    green_t *next = retrieve(); //get first in queue
     running = next;
     swapcontext(susp->context, next->context);
-    
     return 0;
 }
 
 int green_join(green_t *thread, void **res) {
     if (!thread->zombie) {
         green_t *susp = running;
-        susp->join = thread;
-        green_t *next = retrieve2();
+        thread->join = susp;
         
+        green_t *next = retrieve();
         running = next;
         swapcontext(susp->context, next->context);
     }
-    *res = thread->retval;
+    if (res != NULL) {
+        *res = thread->retval;
+    }
     free(thread->context);
     return 0;
 }
