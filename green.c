@@ -26,23 +26,24 @@ void init() {
     getcontext(&main_cntx);
 }
 
-void printlength() {
-    green_t *current = ready_q->first;
+void printlength(green_t *first) {
+    green_t *current = first;
     int size = 0;
     while (current != NULL) {
         size++;
+        printf("ready#: %d\n", *(int*)current->arg);
         current = current->next;
     }
     printf("\t\tlength___: %d\n", size);
 }
 
 void insert(green_t *new, queue_t *queue) {
+    new->next = NULL;
     if (ready_q->first == NULL) {
         ready_q->first = new;
         ready_q->last = new;
         return;
     } else {
-        new->next = NULL;
         queue->last->next = new;
         queue->last = new;
     }
@@ -53,24 +54,31 @@ green_t *detach(queue_t *queue) {
     if (use == NULL) {
         fprintf(stderr, "queue null\n");
         exit(EXIT_FAILURE);
-    }                    //2+ threads in queue + sentinel
+    }
     queue->first = use->next;
+    use->next = NULL;               //?????????????????????
     return use;
 }
 
 void green_cond_init(green_cond_t *cond) {
-    cond->queue = malloc(sizeof(green_cond_t));
-    cond->queue->first = NULL;
-    cond->queue->last = NULL;
+    queue_t * queue = (queue_t *)malloc(sizeof(queue_t));
+    queue -> first = NULL;
+    queue -> last = NULL;
+    cond -> queue = queue;
 }
 
 void green_cond_wait(green_cond_t *cond) {
-
-    
+    green_t *suspended = running;
+    green_t *next = detach(ready_q);
+    running = next;
+    insert(suspended, cond->queue);
+    swapcontext(suspended->context, next->context);
 }
 
 void green_cond_signal(green_cond_t *cond) {
-    
+    if (cond->queue->first == NULL) return;
+    green_t *wake = detach(cond->queue);
+    insert(wake, ready_q);
 }
 
 void green_thread() {
