@@ -3,12 +3,16 @@
 #include <stdio.h>
 #include <ucontext.h>
 #include <assert.h>
+#include <signal.h>
+#include <sys/time.h>
 #include "green.h"
+
 
 #define FALSE 0
 #define TRUE 1
-
+#define PERIOD 100
 #define STACK_SIZE 4096
+
 
 static ucontext_t main_cntx = {0};
 static green_t main_green = {&main_cntx, NULL, NULL, NULL, NULL, NULL, TRUE};
@@ -19,11 +23,28 @@ static queue_t *ready_q = &(queue_t) {
     .last = NULL
 };
 
+static sigset_t block;
+void timer_handler(int sig);
+
 
 static void init() __attribute__((constructor));
 
 void init() {
     getcontext(&main_cntx);
+    sigemptyset(&block);
+    sigaddset(&block, SIGVTALRM);
+
+    struct sigaction act = {0};
+    struct timeval interval;
+    struct itimerval period;
+
+    act.sa_handler = timer_handler;
+    assert(sigaction(SIGVTALRM, &act, NULL) == 0);
+    interval.tv_sec = 0;
+    interval.tv_usec = PERIOD;
+    period.it_interval = interval;
+    period.it_value = interval;
+    setitimer(ITIMER_VIRTUAL, &period, NULL);
 }
 
 void printlength(green_t *first) {
@@ -39,14 +60,14 @@ void printlength(green_t *first) {
 
 void insert(green_t *new, queue_t *queue) {
     new->next = NULL;
-    if (ready_q->first == NULL) {
-        ready_q->first = new;
-        ready_q->last = new;
-        return;
+    if (queue->first == NULL) {
+        queue->first = new;
+        queue->last = new;
     } else {
         queue->last->next = new;
         queue->last = new;
     }
+    return;
 }
 
 green_t *detach(queue_t *queue) {
@@ -61,7 +82,7 @@ green_t *detach(queue_t *queue) {
 }
 
 void green_cond_init(green_cond_t *cond) {
-    queue_t * queue = (queue_t *)malloc(sizeof(queue_t));
+    queue_t *queue = (queue_t*)malloc(sizeof(queue_t));
     queue -> first = NULL;
     queue -> last = NULL;
     cond -> queue = queue;
@@ -69,6 +90,7 @@ void green_cond_init(green_cond_t *cond) {
 
 void green_cond_wait(green_cond_t *cond) {
     green_t *suspended = running;
+
     green_t *next = detach(ready_q);
     running = next;
     insert(suspended, cond->queue);
@@ -81,13 +103,48 @@ void green_cond_signal(green_cond_t *cond) {
     insert(wake, ready_q);
 }
 
+int green_mutex_init(green_mutex_t *mutex) {
+    mutex->taken = FALSE;
+    queue_t *queue = (queue_t*)malloc(sizeof(queue_t));
+    queue->first = NULL;
+    queue->last = NULL;
+    mutex->queue = queue;
+    return 0;
+}
+
+int green_mutex_lock(green_mutex_t *mutex) {
+    sigprocmask(SIG_BLOCK, &block, NULL);
+    green_t *susp = running;
+    if (mutex->taken) {
+        insert(susp, mutex->queue);
+        green_t *next = detach(ready_q);
+        swapcontext(susp->context, next->context);
+    } else {
+        mutex->taken = TRUE;
+    }
+    sigprocmask(SIG_UNBLOCK, &block, NULL);
+    return 0;
+}
+
+int green_mutex_unlock(green_mutex_t *mutex) {
+    sigprocmask(SIG_BLOCK, &block, NULL);
+    if (mutex->queue->first != NULL) {
+        green_t *wake = detach(mutex->queue);
+        insert(wake, ready_q);
+    } else {
+        mutex->taken = FALSE;
+    }
+    sigprocmask(SIG_UNBLOCK, &block, NULL);
+    return 0;
+}
+
 void green_thread() {
     green_t *this = running;
 
     void *result = (*this->fun)(this->arg);
 
     if (this->join != NULL) {
-        insert(this->join, ready_q); //place waiting (joining) thread in ready queu
+        insert(this->join, ready_q); //place waiting (joining) thread in ready queue
     }
     
     this->retval = result;      //save result of execution
@@ -120,9 +177,9 @@ int green_create(green_t *new, void *(*fun)(void*), void *arg) {
 
 int green_yield() {
     green_t *susp = running;
-    insert(susp, ready_q);               //set susp last in queue
+    insert(susp, ready_q);              //set susp last in queue
 
-    green_t *next = detach(ready_q); //get first in queue
+    green_t *next = detach(ready_q);    //get first in queue
     running = next;
     swapcontext(susp->context, next->context);
     return 0;
@@ -142,4 +199,15 @@ int green_join(green_t *thread, void **res) {
     }
     free(thread->context);
     return 0;
+}
+
+void timer_handler(int sig) {
+    if(sig){};
+    sigprocmask(SIG_BLOCK, &block, NULL);
+    green_t *susp = running;
+    insert(susp, ready_q);
+    green_t *next = detach(ready_q);
+    running = next;
+    sigprocmask(SIG_UNBLOCK, &block, NULL);
+    swapcontext(susp->context, next->context);
 }
