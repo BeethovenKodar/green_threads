@@ -35,9 +35,9 @@ void *test_locks(void *arg) {
     printf("LOCKS %d DONE\n", id);
 }
 
-void *test_main(void *arg) {
+void *test_all(void *arg) {
     int id = *(int*)arg;
-    int loop = 500000;
+    int loop = 500;
 
     printf("MAIN TEST %d\n", id);
     while (loop > 0) {
@@ -111,9 +111,9 @@ int main(int argc, char* argv[]) {
 
     int mode = atoi(argv[1]);
 
-    void *fun[6] = {
+    void *fun[5] = {
         test_isr, test_cond, test_yield, 
-        test_locks, test_waitlock, test_main
+        test_locks, test_all
     };
     
     int a0 = 0;
@@ -121,10 +121,10 @@ int main(int argc, char* argv[]) {
     int a2 = 2;
     green_t g0, g1, g2;
     
-    if (mode == 1 || mode == 4 || mode == 5) {
+    if (mode == 1 || mode == 4) {
         green_cond_init(&cond);
     }
-    if (mode == 3 || mode == 4 || mode == 5) {
+    if (mode == 3 || mode == 4) {
         green_mutex_init(&mutex);
     }
 

@@ -245,7 +245,6 @@ int green_join(green_t *thread, void **res) {
     if (!thread->zombie) {
         green_t *susp = running;
         thread->join = susp;
-        
         green_t *next = detach(ready_q);
         running = next;
         sigprocmask(SIG_UNBLOCK, &block, NULL);
